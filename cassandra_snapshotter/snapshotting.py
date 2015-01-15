@@ -281,16 +281,22 @@ class BackupWorker(object):
         with prefix(self.agent_prefix):
             self.run_remotely(cmd)
 
-    def snapshot(self, snapshot):
+    def snapshot(self, snapshot, keep_new_snapshot = False):
         """
         Perform a snapshot
         """
         logging.info('Create %r snapshot' % snapshot)
         try:
             self.start_cluster_backup(snapshot, incremental_backups=False)
+        except:
+            self.clear_cluster_snapshot(snapshot)
+            raise
+
+        try:
             self.upload_cluster_backups(snapshot, incremental_backups=False)
         finally:
-            self.clear_cluster_snapshot(snapshot)
+            if not keep_new_snapshot:
+                self.clear_cluster_snapshot(snapshot)
         self.write_ring_description(snapshot)
         self.write_snapshot_manifest(snapshot)
         if self.backup_schema:

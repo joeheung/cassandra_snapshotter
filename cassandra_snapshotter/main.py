@@ -29,7 +29,10 @@ def run_backup(args):
 
     if args.new_snapshot:
         create_snapshot = True
+        keep_new_snapshot = args.keep_new_snapshot
     else:
+        if args.keep_new_snapshot:
+            logging.warn('--new-snapshot not set. Ignoring --keep-new-snapshot ')
         existing_snapshot = SnapshotCollection(
             args.aws_access_key_id,
             args.aws_secret_access_key,
@@ -67,7 +70,7 @@ def run_backup(args):
             keyspaces=args.keyspaces,
             table=args.table
         )
-        worker.snapshot(snapshot)
+        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot)
     else:
         logging.info('add incrementals to snapshot %s' % existing_snapshot)
         worker.update_snapshot(existing_snapshot)
@@ -182,6 +185,10 @@ def main():
     backup_parser.add_argument('--new-snapshot',
                                action='store_true',
                                help='create a new snapshot')
+
+    backup_parser.add_argument('--keep-new-snapshot',
+                               action='store_true',
+                               help='do not delete the new snapshot after upload to S3 (requires --new-snapshot)')
 
     backup_parser.add_argument('--backup-schema',
                                action='store_true',

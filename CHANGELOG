@@ -1,3 +1,6 @@
+0.3.1-dl5
+ * Added --keep-new-snapshot to not delete the new snapshot from the nodes at the end
+
 0.3.1-dl4
  * Added --agent-virtualenv to set the python virtualenv on the nodes in which to run cassandra-snapshotter-agent
 
