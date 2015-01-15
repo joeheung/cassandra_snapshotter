@@ -1,3 +1,6 @@
+0.3.1-dl1
+ * Added '--no-sudo' to avoid 'sudo' where the SSH user has already all necessary permissions
+
 0.3.1
  * Fix bug with missing manifest file on S3 (--prefix)
 

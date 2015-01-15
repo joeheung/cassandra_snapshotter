@@ -49,7 +49,8 @@ def run_backup(args):
         nodetool_path=args.nodetool_path,
         cassandra_bin_dir=args.cassandra_bin_dir,
         backup_schema=args.backup_schema,
-        connection_pool_size=args.connection_pool_size
+        connection_pool_size=args.connection_pool_size,
+        use_sudo=(not args.no_sudo)
     )
 
     if create_snapshot:
@@ -157,6 +158,10 @@ def main():
     backup_parser.add_argument('--password',
                                 default='',
                                 help='user password to connect with hosts')
+
+    backup_parser.add_argument('--no-sudo',
+                               action='store_true',
+                               help='Do not use \'sudo\' when executing commands on the cassandra nodes')
 
     backup_parser.add_argument('--new-snapshot',
                                action='store_true',

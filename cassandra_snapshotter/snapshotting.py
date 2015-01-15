@@ -7,6 +7,7 @@ from datetime import datetime
 from fabric.api import env
 from fabric.api import execute
 from fabric.api import hide
+from fabric.api import run
 from fabric.api import sudo
 from fabric.context_managers import settings
 from multiprocessing.dummy import Pool
@@ -222,7 +223,7 @@ class BackupWorker(object):
     def __init__(self, aws_secret_access_key,
                  aws_access_key_id, s3_bucket_region, s3_ssenc, s3_connection_host, cassandra_data_path,
                  nodetool_path, cassandra_bin_dir, backup_schema,
-                 connection_pool_size=12):
+                 connection_pool_size=12, use_sudo=True):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3_bucket_region = s3_bucket_region
@@ -233,6 +234,10 @@ class BackupWorker(object):
         self.cassandra_cli_path = "%s/cassandra-cli" % cassandra_bin_dir
         self.backup_schema = backup_schema
         self.connection_pool_size = connection_pool_size
+        if use_sudo:
+            self.run_remotely=sudo
+        else:
+            self.run_remotely=run
 
     def get_current_node_hostname(self):
         return env.host_string
@@ -251,7 +256,7 @@ class BackupWorker(object):
             data_path=self.cassandra_data_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        sudo(cmd)
+        self.run_remotely(cmd)
 
         upload_command = "cassandra-snapshotter-agent %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=4"
         cmd = upload_command % dict(
@@ -264,7 +269,7 @@ class BackupWorker(object):
             manifest=manifest_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        sudo(cmd)
+        self.run_remotely(cmd)
 
     def snapshot(self, snapshot):
         """
@@ -295,7 +300,7 @@ class BackupWorker(object):
     def get_ring_description(self):
         with settings(host_string=env.hosts[0]):
             with hide('output'):
-                ring_description = sudo(self.nodetool_path + ' ring')
+                ring_description = self.run_remotely(self.nodetool_path + ' ring')
         return ring_description
 
     def get_keyspace_schema(self, keyspace=None):
@@ -305,7 +310,7 @@ class BackupWorker(object):
                 cmd = "echo -e 'show schema;\n' | %s" % (self.cassandra_cli_path)
                 if keyspace:
                     cmd = "echo -e 'show schema;\n' | %s -k %s" % (self.cassandra_cli_path, keyspace)
-                output = sudo(cmd)
+                output = self.run_remotely(cmd)
         schema = '\n'.join([l for l in output.split("\n") if re.match(r'(create|use| )',l)])
         return schema
 
@@ -367,7 +372,7 @@ class BackupWorker(object):
         )
 
         with hide('running', 'stdout', 'stderr'):
-            sudo(cmd)
+            self.run_remotely(cmd)
 
     def upload_cluster_backups(self, snapshot, incremental_backups):
         logging.info('Uploading backups')
@@ -388,7 +393,7 @@ class BackupWorker(object):
             nodetool=self.nodetool_path,
             snapshot=snapshot.name
         )
-        sudo(cmd)
+        self.run_remotely(cmd)
 
 
 class SnapshotCollection(object):
