@@ -54,6 +54,7 @@ def run_backup(args):
         backup_schema=args.backup_schema,
         connection_pool_size=args.connection_pool_size,
         agent_path=args.agent_path,
+        agent_virtualenv=args.agent_virtualenv,
         use_sudo=(not args.no_sudo)
     )
 
@@ -156,6 +157,10 @@ def main():
     backup_parser.add_argument('--agent-path',
                                default=None,
                                help='path of cassandra-snapshotter-agent on nodes')
+
+    backup_parser.add_argument('--agent-virtualenv',
+                               default=None,
+                               help='python virtualenv to run cassandra-snapshotter-agent in on nodes')
 
     backup_parser.add_argument('--user',
                                help='the ssh user to logging on nodes')

@@ -9,7 +9,7 @@ from fabric.api import execute
 from fabric.api import hide
 from fabric.api import run
 from fabric.api import sudo
-from fabric.context_managers import settings
+from fabric.context_managers import settings, prefix
 from multiprocessing.dummy import Pool
 import json
 import logging
@@ -223,7 +223,7 @@ class BackupWorker(object):
     def __init__(self, aws_secret_access_key,
                  aws_access_key_id, s3_bucket_region, s3_ssenc, s3_connection_host, cassandra_data_path,
                  nodetool_path, cassandra_bin_dir, backup_schema,
-                 connection_pool_size=12, use_sudo=True, agent_path=None):
+                 connection_pool_size=12, use_sudo=True, agent_path=None, agent_virtualenv=None):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3_bucket_region = s3_bucket_region
@@ -239,12 +239,16 @@ class BackupWorker(object):
             self.run_remotely=sudo
         else:
             self.run_remotely=run
+        if agent_virtualenv:
+            self.agent_prefix = 'source %s/bin/activate' % agent_virtualenv
+        else:
+            self.agent_prefix = 'true'
 
     def get_current_node_hostname(self):
         return env.host_string
 
     def upload_node_backups(self, snapshot, incremental_backups):
-        prefix = '/'.join(snapshot.base_path.split(
+        s3prefix = '/'.join(snapshot.base_path.split(
             '/') + [self.get_current_node_hostname()])
 
         manifest_path = '/tmp/backupmanifest'
@@ -258,21 +262,24 @@ class BackupWorker(object):
             data_path=self.cassandra_data_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        self.run_remotely(cmd)
+        
+        with prefix(self.agent_prefix):
+            self.run_remotely(cmd)
 
-        upload_command = "%(agent_path)s %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=4"
+        upload_command = "%(agent_path)s %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(s3prefix)s --manifest=%(manifest)s --concurrency=4"
         cmd = upload_command % dict(
             bucket=snapshot.s3_bucket,
             s3_bucket_region=self.s3_bucket_region,
             s3_ssenc=self.s3_ssenc and '--s3-ssenc' or '',
-            prefix=prefix,
+            s3prefix=s3prefix,
             key=self.aws_access_key_id,
             secret=self.aws_secret_access_key,
             manifest=manifest_path,
             agent_path=self.agent_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        self.run_remotely(cmd)
+        with prefix(self.agent_prefix):
+            self.run_remotely(cmd)
 
     def snapshot(self, snapshot):
         """
@@ -415,13 +422,13 @@ class SnapshotCollection(object):
         conn = S3Connection(self.aws_access_key_id, self.aws_secret_access_key)
         bucket = conn.get_bucket(self.s3_bucket, validate=False)
         self.snapshots = []
-        prefix = self.base_path
+        s3prefix = self.base_path
         if not self.base_path.endswith('/'):
-            prefix = '%s/' % self.base_path
+            s3prefix = '%s/' % self.base_path
         snap_paths = [snap.name for snap in bucket.list(
-            prefix=prefix, delimiter='/')]
+            s3prefix=s3prefix, delimiter='/')]
         # Remove the root dir from the list since it won't have a manifest file.
-        snap_paths = [x for x in snap_paths if x != prefix]
+        snap_paths = [x for x in snap_paths if x != s3prefix]
         for snap_path in snap_paths:
             mkey = Key(bucket)
             manifest_path = '/'.join([snap_path, 'manifest.json'])

@@ -1,3 +1,6 @@
+0.3.1-dl4
+ * Added --agent-virtualenv to set the python virtualenv on the nodes in which to run cassandra-snapshotter-agent
+
 0.3.1-dl3
  * Added --agent-path to allow for cassandra-snapshotter-agent being outside the nodes' default PATH
 
