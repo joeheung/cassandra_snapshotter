@@ -426,7 +426,7 @@ class SnapshotCollection(object):
         if not self.base_path.endswith('/'):
             s3prefix = '%s/' % self.base_path
         snap_paths = [snap.name for snap in bucket.list(
-            s3prefix=s3prefix, delimiter='/')]
+            prefix=s3prefix, delimiter='/')]
         # Remove the root dir from the list since it won't have a manifest file.
         snap_paths = [x for x in snap_paths if x != s3prefix]
         for snap_path in snap_paths:
