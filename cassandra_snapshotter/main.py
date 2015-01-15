@@ -22,6 +22,9 @@ def run_backup(args):
     if args.sshport:
         env.port = args.sshport
 
+    if args.sshkey:
+        env.key_filename = args.sshkey
+
     env.hosts = args.hosts.split(',')
 
     if args.new_snapshot:
@@ -154,6 +157,9 @@ def main():
 
     backup_parser.add_argument('--sshport',
                                help='the ssh port to use to connect to the nodes')
+
+    backup_parser.add_argument('--sshkey',
+                               help='the file containing the private ssh key to use to connect to the nodes')
 
     backup_parser.add_argument('--password',
                                 default='',
