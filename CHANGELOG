@@ -1,3 +1,6 @@
+0.3.1-dl3
+ * Added --agent-path to allow for cassandra-snapshotter-agent being outside the nodes' default PATH
+
 0.3.1-dl2
  * Added --sshkey to allow for a non-default SSH keyfile (equivalent to 'ssh -i')
 

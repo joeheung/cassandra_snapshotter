@@ -53,6 +53,7 @@ def run_backup(args):
         cassandra_bin_dir=args.cassandra_bin_dir,
         backup_schema=args.backup_schema,
         connection_pool_size=args.connection_pool_size,
+        agent_path=args.agent_path,
         use_sudo=(not args.no_sudo)
     )
 
@@ -144,13 +145,17 @@ def main():
                                default='/var/lib/cassandra/data/',
                                help='cassandra data path.')
 
+    backup_parser.add_argument('--cassandra-bin-dir',
+                               default='/usr/bin',
+                               help='cassandra binaries directory')
+
     backup_parser.add_argument('--nodetool-path',
                                default=None,
                                help='nodetool path.')
 
-    backup_parser.add_argument('--cassandra-bin-dir',
-                               default='/usr/bin',
-                               help='cassandra binaries directory')
+    backup_parser.add_argument('--agent-path',
+                               default=None,
+                               help='path of cassandra-snapshotter-agent on nodes')
 
     backup_parser.add_argument('--user',
                                help='the ssh user to logging on nodes')

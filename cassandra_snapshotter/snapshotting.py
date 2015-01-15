@@ -223,7 +223,7 @@ class BackupWorker(object):
     def __init__(self, aws_secret_access_key,
                  aws_access_key_id, s3_bucket_region, s3_ssenc, s3_connection_host, cassandra_data_path,
                  nodetool_path, cassandra_bin_dir, backup_schema,
-                 connection_pool_size=12, use_sudo=True):
+                 connection_pool_size=12, use_sudo=True, agent_path=None):
         self.aws_secret_access_key = aws_secret_access_key
         self.aws_access_key_id = aws_access_key_id
         self.s3_bucket_region = s3_bucket_region
@@ -234,6 +234,7 @@ class BackupWorker(object):
         self.cassandra_cli_path = "%s/cassandra-cli" % cassandra_bin_dir
         self.backup_schema = backup_schema
         self.connection_pool_size = connection_pool_size
+        self.agent_path = agent_path or 'cassandra-snapshotter-agent'
         if use_sudo:
             self.run_remotely=sudo
         else:
@@ -247,18 +248,19 @@ class BackupWorker(object):
             '/') + [self.get_current_node_hostname()])
 
         manifest_path = '/tmp/backupmanifest'
-        manifest_command = "cassandra-snapshotter-agent %(incremental_backups)s create-upload-manifest --manifest_path=%(manifest_path)s --snapshot_name=%(snapshot_name)s --snapshot_keyspaces=%(snapshot_keyspaces)s --snapshot_table=%(snapshot_table)s --data_path=%(data_path)s"
+        manifest_command = "%(agent_path)s %(incremental_backups)s create-upload-manifest --manifest_path=%(manifest_path)s --snapshot_name=%(snapshot_name)s --snapshot_keyspaces=%(snapshot_keyspaces)s --snapshot_table=%(snapshot_table)s --data_path=%(data_path)s"
         cmd = manifest_command % dict(
             manifest_path=manifest_path,
             snapshot_name=snapshot.name,
             snapshot_keyspaces=snapshot.keyspaces,
             snapshot_table=snapshot.table,
+            agent_path=self.agent_path,
             data_path=self.cassandra_data_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         self.run_remotely(cmd)
 
-        upload_command = "cassandra-snapshotter-agent %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=4"
+        upload_command = "%(agent_path)s %(incremental_backups)s put --aws-access-key-id=%(key)s --aws-secret-access-key=%(secret)s --s3-bucket-name=%(bucket)s --s3-bucket-region=%(s3_bucket_region)s %(s3_ssenc)s --s3-base-path=%(prefix)s --manifest=%(manifest)s --concurrency=4"
         cmd = upload_command % dict(
             bucket=snapshot.s3_bucket,
             s3_bucket_region=self.s3_bucket_region,
@@ -267,6 +269,7 @@ class BackupWorker(object):
             key=self.aws_access_key_id,
             secret=self.aws_secret_access_key,
             manifest=manifest_path,
+            agent_path=self.agent_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
         self.run_remotely(cmd)
