@@ -30,9 +30,12 @@ def run_backup(args):
     if args.new_snapshot:
         create_snapshot = True
         keep_new_snapshot = args.keep_new_snapshot
+        delete_old_snapshots = args.delete_old_snapshots
     else:
         if args.keep_new_snapshot:
             logging.warn('--new-snapshot not set. Ignoring --keep-new-snapshot ')
+        if args.delete_old_snapshots:
+            logging.warn('--new-snapshot not set. Ignoring --delete-old-snapshots')
         existing_snapshot = SnapshotCollection(
             args.aws_access_key_id,
             args.aws_secret_access_key,
@@ -70,7 +73,7 @@ def run_backup(args):
             keyspaces=args.keyspaces,
             table=args.table
         )
-        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot)
+        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot, delete_old_snapshots = delete_old_snapshots)
     else:
         logging.info('add incrementals to snapshot %s' % existing_snapshot)
         worker.update_snapshot(existing_snapshot)
@@ -185,6 +188,10 @@ def main():
     backup_parser.add_argument('--new-snapshot',
                                action='store_true',
                                help='create a new snapshot')
+
+    backup_parser.add_argument('--delete-old-snapshots',
+                               action='store_true',
+                               help='delete any old snapshots from the nodes (not from S3!). Helpful when a previous run had --keep-new-snapshot set')
 
     backup_parser.add_argument('--keep-new-snapshot',
                                action='store_true',

@@ -1,5 +1,9 @@
+0.3.1-dl6
+ * Added --delete-old-snapshots to delete any old snapshots from the nodes prior to creating a new snapshot
+
 0.3.1-dl5
  * Added --keep-new-snapshot to not delete the new snapshot from the nodes at the end
+ * Fixed bug in 0.3.1-dl4 with the string rename 'prefix' --> 's3prefix'
 
 0.3.1-dl4
  * Added --agent-virtualenv to set the python virtualenv on the nodes in which to run cassandra-snapshotter-agent

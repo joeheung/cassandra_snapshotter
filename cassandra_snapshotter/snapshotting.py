@@ -243,6 +243,7 @@ class BackupWorker(object):
             self.agent_prefix = 'source %s/bin/activate' % agent_virtualenv
         else:
             self.agent_prefix = 'true'
+        self.ALL_SNAPSHOTS = '__ALL_SNAPSHOTS__'
 
     def get_current_node_hostname(self):
         return env.host_string
@@ -281,22 +282,26 @@ class BackupWorker(object):
         with prefix(self.agent_prefix):
             self.run_remotely(cmd)
 
-    def snapshot(self, snapshot, keep_new_snapshot = False):
+    def snapshot(self, snapshot, keep_new_snapshot=False, delete_old_snapshots=False):
         """
         Perform a snapshot
         """
+
+        if delete_old_snapshots:
+            self.clear_cluster_snapshot(self.ALL_SNAPSHOTS)
         logging.info('Create %r snapshot' % snapshot)
         try:
             self.start_cluster_backup(snapshot, incremental_backups=False)
         except:
-            self.clear_cluster_snapshot(snapshot)
+            self.clear_cluster_snapshot(snapshot.name)
             raise
 
         try:
             self.upload_cluster_backups(snapshot, incremental_backups=False)
         finally:
             if not keep_new_snapshot:
-                self.clear_cluster_snapshot(snapshot)
+                logging.info('Removing new snapshot from nodes')
+                self.clear_cluster_snapshot(snapshot.name)
         self.write_ring_description(snapshot)
         self.write_snapshot_manifest(snapshot)
         if self.backup_schema:
@@ -395,20 +400,19 @@ class BackupWorker(object):
         with settings(parallel=True, pool_size=self.connection_pool_size):
             execute(self.upload_node_backups, snapshot, incremental_backups)
 
-    def clear_cluster_snapshot(self, snapshot):
+    def clear_cluster_snapshot(self, snapshot_name):
         logging.info('Clearing snapshots')
         with settings(parallel=True, pool_size=self.connection_pool_size):
-            execute(self.clear_node_snapshot, snapshot)
+            execute(self.clear_node_snapshot, snapshot_name)
 
-    def clear_node_snapshot(self, snapshot):
+    def clear_node_snapshot(self, snapshot_name):
         '''
         cleans up snapshots from a cassandra node
         '''
-        clear_command = '%(nodetool)s clearsnapshot -t "%(snapshot)s"'
-        cmd = clear_command % dict(
-            nodetool=self.nodetool_path,
-            snapshot=snapshot.name
-        )
+        if (snapshot_name == self.ALL_SNAPSHOTS):
+            cmd = '%s clearsnapshot'         % (self.nodetool_path)
+        else:
+            cmd = '%s clearsnapshot -t "%s"' % (self.nodetool_path, snapshot_name)
         self.run_remotely(cmd)
 
 
