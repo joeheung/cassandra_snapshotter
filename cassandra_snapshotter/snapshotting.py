@@ -282,11 +282,18 @@ class BackupWorker(object):
         with prefix(self.agent_prefix):
             self.run_remotely(cmd)
 
-    def snapshot(self, snapshot, keep_new_snapshot=False, delete_old_snapshots=False):
+    def snapshot(self, snapshot, keep_new_snapshot=False, delete_old_snapshots=False, delete_backups=False):
         """
         Perform a snapshot
         """
 
+        if delete_backups:
+            if not self.cassandra_data_path:
+                logging.warn('WARNING: --cassandra-data-path not set. Will not empty node backups directories')
+            elif not snapshot.keyspaces:
+                logging.warn('WARNING: --keyspaces not set. Will not empty node backups directories')
+            else:
+                self.clear_cluster_backups(snapshot)
         if delete_old_snapshots:
             self.clear_cluster_snapshot(self.ALL_SNAPSHOTS)
         logging.info('Create %r snapshot' % snapshot)
@@ -400,6 +407,27 @@ class BackupWorker(object):
         with settings(parallel=True, pool_size=self.connection_pool_size):
             execute(self.upload_node_backups, snapshot, incremental_backups)
 
+    def clear_cluster_backups(self, snapshot):
+        with settings(parallel=True, pool_size=self.connection_pool_size):
+            execute(self.clear_node_backups, snapshot)
+
+    def clear_node_backups(self, snapshot):
+        '''
+        cleans up cassandra "backups" directory from a cassandra node
+        '''
+        logging.info('Emptying cassandra "backups" directory on node')
+
+        # TODO Allow 'snapshot.keyspaces' to be empty (=all keyspaces)
+        for ks in snapshot.keyspaces.split(","):
+            keyspace_dir = '%s/%s' % (self.cassandra_data_path, ks)
+            if snapshot.table:
+                backups_dirs = [ keyspace_dir + '/' + snapshot.table + '/backups' ]
+            else:
+                backups_dirs = self.run_remotely('find %s -mindepth 2 -name backups -type d' % keyspace_dir).split()
+
+            for backup_dir in backups_dirs:
+                self.run_remotely('find %s -mindepth 1 -delete' % backup_dir)
+        
     def clear_cluster_snapshot(self, snapshot_name):
         logging.info('Clearing snapshots')
         with settings(parallel=True, pool_size=self.connection_pool_size):

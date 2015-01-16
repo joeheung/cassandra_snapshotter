@@ -31,11 +31,14 @@ def run_backup(args):
         create_snapshot = True
         keep_new_snapshot = args.keep_new_snapshot
         delete_old_snapshots = args.delete_old_snapshots
+        delete_backups = args.delete_incremental_backups
     else:
         if args.keep_new_snapshot:
             logging.warn('--new-snapshot not set. Ignoring --keep-new-snapshot ')
         if args.delete_old_snapshots:
             logging.warn('--new-snapshot not set. Ignoring --delete-old-snapshots')
+        if args.delete_incremental_backups:
+            logging.warn('--new-snapshot not set. Ignoring --delete-incremental-backup')
         existing_snapshot = SnapshotCollection(
             args.aws_access_key_id,
             args.aws_secret_access_key,
@@ -73,7 +76,7 @@ def run_backup(args):
             keyspaces=args.keyspaces,
             table=args.table
         )
-        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot, delete_old_snapshots = delete_old_snapshots)
+        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot, delete_old_snapshots = delete_old_snapshots, delete_backups = delete_backups)
     else:
         logging.info('add incrementals to snapshot %s' % existing_snapshot)
         worker.update_snapshot(existing_snapshot)
@@ -196,6 +199,10 @@ def main():
     backup_parser.add_argument('--keep-new-snapshot',
                                action='store_true',
                                help='do not delete the new snapshot after upload to S3 (requires --new-snapshot)')
+
+    backup_parser.add_argument('--delete-incremental-backups',
+                               action='store_true',
+                               help='empty Cassandra\'s incremental \'backups\' directory on the nodes. Requires --new-snapshot, --cassandra-data-path and (currently) --keyspaces')
 
     backup_parser.add_argument('--backup-schema',
                                action='store_true',

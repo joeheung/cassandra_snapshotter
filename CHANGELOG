@@ -1,3 +1,6 @@
+0.3.1-dl7
+ * Added --delete-incremental-backups which empties the incremental 'backups' directories on nodes
+
 0.3.1-dl6
  * Added --delete-old-snapshots to delete any old snapshots from the nodes prior to creating a new snapshot
 
