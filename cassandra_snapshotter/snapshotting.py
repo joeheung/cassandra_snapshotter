@@ -95,10 +95,11 @@ class Snapshot(object):
 class RestoreWorker(object):
     def __init__(self, aws_access_key_id, aws_secret_access_key, snapshot, local_source='', merge_dir='.'):
 
-        self.aws_secret_access_key = aws_secret_access_key
-        self.aws_access_key_id = aws_access_key_id
-        self.s3connection = S3Connection(aws_access_key_id=self.aws_access_key_id,
-                                         aws_secret_access_key=self.aws_secret_access_key)
+        if not local_source:
+            self.aws_secret_access_key = aws_secret_access_key
+            self.aws_access_key_id = aws_access_key_id
+            self.s3connection = S3Connection(aws_access_key_id=self.aws_access_key_id,
+                                             aws_secret_access_key=self.aws_secret_access_key)
 
         self.snapshot = snapshot
         self.keyspace_table_matcher = None

@@ -110,10 +110,13 @@ def restore_backup(args):
         args.s3_bucket_name
     )
 
-    if args.snapshot_name == 'LATEST':
-        snapshot = snapshots.get_latest()
-    else:
-        snapshot = snapshots.get_snapshot_by_name(args.backup_name)
+    snapshot = None
+
+    if not args.local_source or not args.hosts :
+        if args.snapshot_name == 'LATEST':
+            snapshot = snapshots.get_latest()
+        else:
+            snapshot = snapshots.get_snapshot_by_name(args.backup_name)
 
     worker = RestoreWorker(aws_access_key_id=args.aws_access_key_id,
                            aws_secret_access_key=args.aws_secret_access_key,
