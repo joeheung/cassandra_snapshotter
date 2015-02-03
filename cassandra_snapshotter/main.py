@@ -1,6 +1,6 @@
 from collections import defaultdict
-from fabric.api import env
 import logging
+from fabric.api import env
 from snapshotting import BackupWorker, RestoreWorker
 from snapshotting import Snapshot
 from snapshotting import SnapshotCollection
@@ -27,18 +27,24 @@ def run_backup(args):
 
     env.hosts = args.hosts.split(',')
 
+    keep_new_snapshot = args.keep_new_snapshot
+    delete_old_snapshots = args.delete_old_snapshots
+    delete_backups = args.delete_incremental_backups
+
     if args.new_snapshot:
         create_snapshot = True
-        keep_new_snapshot = args.keep_new_snapshot
-        delete_old_snapshots = args.delete_old_snapshots
-        delete_backups = args.delete_incremental_backups
+        existing_snapshot = None
     else:
         if args.keep_new_snapshot:
             logging.warn('--new-snapshot not set. Ignoring --keep-new-snapshot ')
+            keep_new_snapshot = False
         if args.delete_old_snapshots:
             logging.warn('--new-snapshot not set. Ignoring --delete-old-snapshots')
+            delete_old_snapshots = False
         if args.delete_incremental_backups:
             logging.warn('--new-snapshot not set. Ignoring --delete-incremental-backup')
+            delete_backups = False
+
         existing_snapshot = SnapshotCollection(
             args.aws_access_key_id,
             args.aws_secret_access_key,
@@ -76,7 +82,8 @@ def run_backup(args):
             keyspaces=args.keyspaces,
             table=args.table
         )
-        worker.snapshot(snapshot, keep_new_snapshot = keep_new_snapshot, delete_old_snapshots = delete_old_snapshots, delete_backups = delete_backups)
+        worker.snapshot(snapshot, keep_new_snapshot=keep_new_snapshot, delete_old_snapshots=delete_old_snapshots,
+                        delete_backups=delete_backups)
     else:
         logging.info('add incrementals to snapshot %s' % existing_snapshot)
         worker.update_snapshot(existing_snapshot)
@@ -112,7 +119,7 @@ def restore_backup(args):
 
     snapshot = None
 
-    if not args.local_source or not args.hosts :
+    if not args.local_source or not args.hosts:
         if args.snapshot_name == 'LATEST':
             snapshot = snapshots.get_latest()
         else:
@@ -120,7 +127,9 @@ def restore_backup(args):
 
     worker = RestoreWorker(aws_access_key_id=args.aws_access_key_id,
                            aws_secret_access_key=args.aws_secret_access_key,
-                           snapshot=snapshot,local_source=args.local_source, merge_dir=args.merge_dir)
+                           snapshot=snapshot,
+                           local_source=args.local_source,
+                           merge_dir=args.merge_dir)
 
     if args.hosts:
         hosts = args.hosts.split(',')
@@ -135,7 +144,7 @@ def restore_backup(args):
 def main():
     base_parser = add_s3_arguments(_base_parser)
     subparsers = base_parser.add_subparsers(title='subcommands',
-                                       dest='subcommand')
+                                            dest='subcommand')
 
     subparsers.add_parser('list', help='list existing backups')
 
@@ -184,8 +193,8 @@ def main():
                                help='the file containing the private ssh key to use to connect to the nodes')
 
     backup_parser.add_argument('--password',
-                                default='',
-                                help='user password to connect with hosts')
+                               default='',
+                               help='user password to connect with hosts')
 
     backup_parser.add_argument('--no-sudo',
                                action='store_true',
@@ -197,15 +206,18 @@ def main():
 
     backup_parser.add_argument('--delete-old-snapshots',
                                action='store_true',
-                               help='delete any old snapshots from the nodes (not from S3!). Helpful when a previous run had --keep-new-snapshot set')
+                               help='Deletes any old snapshots from the nodes (not from S3!). '
+                                    'Helpful when a previous run had --keep-new-snapshot set')
 
     backup_parser.add_argument('--keep-new-snapshot',
                                action='store_true',
-                               help='do not delete the new snapshot after upload to S3 (requires --new-snapshot)')
+                               help='Do not delete the new snapshot after upload to S3. '
+                                    'Requires --new-snapshot')
 
     backup_parser.add_argument('--delete-incremental-backups',
                                action='store_true',
-                               help='empty Cassandra\'s incremental \'backups\' directory on the nodes. Requires --new-snapshot, --cassandra-data-path and (currently) --keyspaces')
+                               help='Empty Cassandra\'s incremental \'backups\' directory on the nodes. '
+                                    'Requires --new-snapshot, --cassandra-data-path and (currently) --keyspaces')
 
     backup_parser.add_argument('--backup-schema',
                                action='store_true',

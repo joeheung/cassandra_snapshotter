@@ -1,5 +1,5 @@
 import re
-import shutil, glob
+import shutil
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
@@ -140,35 +140,33 @@ class RestoreWorker(object):
 
         self._restore(keyspace, table, hosts, target_hosts)
 
-
     def _find_local_keys(self):
 
-        def list_files(path) :
-            bucket = []
+        def list_files(path):
+            bucket_files = []
             for root, dirs, files in os.walk(path):
                 for filename in files:
                     fp = os.path.join(root, filename)
-                    bucket.append( fp )
+                    bucket_files.append(fp)
 
-            return bucket
+            return bucket_files
 
-        bucket = list_files(self.local_source)
+        bucket_list = list_files(self.local_source)
 
         keys = []
         tables = set()
 
-        for k in bucket:
-            r = self.keyspace_table_matcher.search(k)
+        for key_name in bucket_list:
+            r = self.keyspace_table_matcher.search(key_name)
             if not r:
                 continue
 
             tables.add(r.group(3))
-            keys.append(k)
+            keys.append(key_name)
 
         total_size = reduce(lambda s, k: s + os.path.getsize(k), keys, 0)
 
         return keys, tables, total_size
-
 
     def _find_s3_keys(self):
 
@@ -177,13 +175,13 @@ class RestoreWorker(object):
         keys = []
         tables = set()
 
-        for k in bucket.list(self.snapshot.base_path):
-            r = self.keyspace_table_matcher.search(k.name)
+        for key in bucket.list(self.snapshot.base_path):
+            r = self.keyspace_table_matcher.search(key.name)
             if not r:
                 continue
 
             tables.add(r.group(3))
-            keys.append(k)
+            keys.append(key)
 
         total_size = reduce(lambda s, k: s + k.size, keys, 0)
 
@@ -193,9 +191,8 @@ class RestoreWorker(object):
         # TODO:
         # 4. sstableloader
 
-        logging.info("Restoring Cassandra data from hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
-                                                                         target_hosts=', '.join(
-                                                                             target_hosts)))
+        logging.info("Restoring Cassandra data from hosts: %(hosts)s to: %(target_hosts)s" % dict(
+            hosts=', '.join(hosts), target_hosts=', '.join(target_hosts)))
         if not table:
             table = ".*?"
 
@@ -204,17 +201,16 @@ class RestoreWorker(object):
 
         if self.local_source:
             logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s, "
-                     "from existing local data: %(local_dir)s " % dict(keyspace=keyspace,
+                         "from existing local data: %(local_dir)s " % dict(keyspace=keyspace,
                                                                            table=table, local_dir=self.local_source))
 
             keys, tables, total_size = self._find_local_keys()
 
         else:
             logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
-                                                                                table=table))
+                                                                                   table=table))
 
             keys, tables, total_size = self._find_s3_keys()
-
 
         self._delete_old_dir_and_create_new(keyspace, tables)
 
@@ -227,7 +223,6 @@ class RestoreWorker(object):
         logging.info("Finished downloading...")
 
         self._run_sstableloader(keyspace, tables, target_hosts)
-
 
     def _delete_old_dir_and_create_new(self, keyspace, tables):
 
@@ -264,11 +259,11 @@ class RestoreWorker(object):
             read_bytes += size
             progress_string = "%s / %s (%.2f%%)" % (self._human_size(read_bytes),
                                                     self._human_size(total_size),
-                                                    (read_bytes/float(total_size))*100.0)
+                                                    (read_bytes / float(total_size)) * 100.0)
             width = len(progress_string)
             padding = ""
             if width < old_width:
-                padding = " " * (width-old_width)
+                padding = " " * (width - old_width)
             progress_string = "%s%s\r" % (progress_string, padding)
 
             sys.stderr.write(progress_string)
@@ -298,7 +293,8 @@ class RestoreWorker(object):
         dst = self.dst_from_key(path=key.name)
         download_snappy_key(key, dst)
 
-    def _human_size(self, size):
+    @staticmethod
+    def _human_size(size):
         for x in ['bytes', 'KB', 'MB', 'GB']:
             if size < 1024.0:
                 return "%3.1f%s" % (size, x)
@@ -310,13 +306,14 @@ class RestoreWorker(object):
         hosts = ','.join(target_hosts)
         for table in tables:
             path = os.path.join(self.merge_dir, keyspace, table)
-            command = 'sstableloader --nodes %(hosts)s -v %(path)s' % dict( hosts=hosts, path=path )
+            command = 'sstableloader --nodes %(hosts)s -v %(path)s' % dict(hosts=hosts, path=path)
             logging.info("invoking: -->\n\n%s", command)
 
             try:
                 os.system(command)
             except:
-                logging.exception("Failed to run command")
+                logging.exception("Failed to run command {0}".format(command))
+                raise
 
 
 class BackupWorker(object):
@@ -354,16 +351,17 @@ class BackupWorker(object):
         self.connection_pool_size = connection_pool_size
         self.agent_path = agent_path or 'cassandra-snapshotter-agent'
         if use_sudo:
-            self.run_remotely=sudo
+            self.run_remotely = sudo
         else:
-            self.run_remotely=run
+            self.run_remotely = run
         if agent_virtualenv:
             self.agent_prefix = 'source %s/bin/activate' % agent_virtualenv
         else:
             self.agent_prefix = 'true'
         self.ALL_SNAPSHOTS = '__ALL_SNAPSHOTS__'
 
-    def get_current_node_hostname(self):
+    @staticmethod
+    def get_current_node_hostname():
         return env.host_string
 
     def upload_node_backups(self, snapshot, incremental_backups):
@@ -450,17 +448,16 @@ class BackupWorker(object):
         return ring_description
 
     def get_keyspace_schema(self, keyspace=None):
-        output = ""
         with settings(host_string=env.hosts[0]):
             with hide('output'):
-                cmd = "echo -e 'show schema;\n' | %s" % (self.cassandra_cli_path)
+                cmd = "echo -e 'show schema;\n' | %s" % self.cassandra_cli_path
                 if keyspace:
                     cmd = "echo -e 'show schema;\n' | %s -k %s" % (self.cassandra_cli_path, keyspace)
                 output = self.run_remotely(cmd)
-        schema = '\n'.join([l for l in output.split("\n") if re.match(r'(create|use| )',l)])
+        schema = '\n'.join([l for l in output.split("\n") if re.match(r'(create|use| )', l)])
         return schema
 
-    def write_on_S3(self, bucket_name, path, content):
+    def write_on_s3(self, bucket_name, path, content):
         conn = S3Connection(self.aws_access_key_id, self.aws_secret_access_key, host=self.s3_connection_host)
         bucket = conn.get_bucket(bucket_name, validate=False)
         key = bucket.new_key(path)
@@ -470,7 +467,7 @@ class BackupWorker(object):
         logging.info('Writing ring description')
         content = self.get_ring_description()
         ring_path = '/'.join([snapshot.base_path, 'ring'])
-        self.write_on_S3(snapshot.s3_bucket, ring_path, content)
+        self.write_on_s3(snapshot.s3_bucket, ring_path, content)
 
     def write_schema(self, snapshot):
         if snapshot.keyspaces:
@@ -478,17 +475,17 @@ class BackupWorker(object):
                 logging.info('Writing schema for keyspace %s' % ks)
                 content = self.get_keyspace_schema(ks)
                 schema_path = '/'.join([snapshot.base_path, "schema_%s.cdl" % ks])
-                self.write_on_S3(snapshot.s3_bucket, schema_path, content)
+                self.write_on_s3(snapshot.s3_bucket, schema_path, content)
         else:
             logging.info('Writing schema for all keyspaces')
             content = self.get_keyspace_schema()
             schema_path = '/'.join([snapshot.base_path, "schema.cdl"])
-            self.write_on_S3(snapshot.s3_bucket, schema_path, content)
+            self.write_on_s3(snapshot.s3_bucket, schema_path, content)
 
     def write_snapshot_manifest(self, snapshot):
         content = snapshot.dump_manifest_file()
         manifest_path = '/'.join([snapshot.base_path, 'manifest.json'])
-        self.write_on_S3(snapshot.s3_bucket, manifest_path, content)
+        self.write_on_s3(snapshot.s3_bucket, manifest_path, content)
 
     def start_cluster_backup(self, snapshot, incremental_backups=False):
         logging.info('Creating snapshots')
@@ -496,9 +493,9 @@ class BackupWorker(object):
             execute(self.node_start_backup, snapshot, incremental_backups)
 
     def node_start_backup(self, snapshot, incremental_backups):
-        '''
+        """
         runs snapshot command on a cassandra node
-        '''
+        """
 
         if snapshot.table:
             table_param = '-cf %s' % snapshot.table
@@ -530,21 +527,26 @@ class BackupWorker(object):
             execute(self.clear_node_backups, snapshot)
 
     def clear_node_backups(self, snapshot):
-        '''
+        """
         cleans up cassandra "backups" directory from a cassandra node
-        '''
+        """
         logging.info('Emptying cassandra "backups" directory on node')
 
-        # TODO Allow 'snapshot.keyspaces' to be empty (=all keyspaces)
-        for ks in snapshot.keyspaces.split(","):
-            keyspace_dir = '%s/%s' % (self.cassandra_data_path, ks)
+        backups_dirs = []
+        if snapshot.keyspaces:
+            keyspace_directories = snapshot.keyspaces.split(",")
+        else:
+            keyspace_directories = self.run_remotely('find %s -mindepth 1 -maxdepth 1 -type d' % self.cassandra_data_path).split()
+
+        for ks in keyspace_directories:
+            keyspace_dir = os.path.join(self.cassandra_data_path, ks)
             if snapshot.table:
-                backups_dirs = [ keyspace_dir + '/' + snapshot.table + '/backups' ]
+                backups_dirs = [keyspace_dir + '/' + snapshot.table + '/backups']
             else:
                 backups_dirs = self.run_remotely('find %s -mindepth 2 -name backups -type d' % keyspace_dir).split()
 
-            for backup_dir in backups_dirs:
-                self.run_remotely('find %s -mindepth 1 -delete' % backup_dir)
+        for backup_dir in backups_dirs:
+            self.run_remotely('find %s -mindepth 1 -delete' % backup_dir)
 
     def clear_cluster_snapshot(self, snapshot_name):
         logging.info('Clearing snapshots')
@@ -552,11 +554,11 @@ class BackupWorker(object):
             execute(self.clear_node_snapshot, snapshot_name)
 
     def clear_node_snapshot(self, snapshot_name):
-        '''
+        """
         cleans up snapshots from a cassandra node
-        '''
-        if (snapshot_name == self.ALL_SNAPSHOTS):
-            cmd = '%s clearsnapshot'         % (self.nodetool_path)
+        """
+        if snapshot_name == self.ALL_SNAPSHOTS:
+            cmd = '%s clearsnapshot' % self.nodetool_path
         else:
             cmd = '%s clearsnapshot -t "%s"' % (self.nodetool_path, snapshot_name)
         self.run_remotely(cmd)
@@ -611,9 +613,9 @@ class SnapshotCollection(object):
         return self.snapshots[0]
 
     def get_snapshot_for(self, hosts, keyspaces, table):
-        '''
+        """
         returns the most recent compatible snapshot
-        '''
+        """
         for snapshot in self:
             if snapshot.hosts != hosts:
                 continue
@@ -627,50 +629,46 @@ class SnapshotCollection(object):
         self._read_s3()
         return iter(self.snapshots)
 
-
-
-
-
-        # def _restore_from_s3(self, keyspace, table, hosts, target_hosts):
-        #     # TODO:
-        #     # 4. sstableloader
-        #
-        #     logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
-        #                                                                            table=table))
-        #
-        #     logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
-        #                                                                      target_hosts=', '.join(
-        #                                                                          target_hosts)))
-        #     if not table:
-        #         table = ".*?"
-        #
-        #     bucket = self.s3connection.get_bucket(self.snapshot.s3_bucket, validate=False)
-        #
-        #     matcher_string = "(%(hosts)s).*%(separator)s(%(keyspace)s)%(separator)s(%(table)s)%(separator)s" % dict(
-        #         hosts='|'.join(hosts), keyspace=keyspace, table=table, separator=self.path_separator)
-        #     self.keyspace_table_matcher = re.compile(matcher_string)
-        #
-        #     keys = []
-        #     tables = set()
-        #
-        #     for k in bucket.list(self.snapshot.base_path):
-        #         r = self.keyspace_table_matcher.search(k.name)
-        #         if not r:
-        #             continue
-        #
-        #         tables.add(r.group(3))
-        #         keys.append(k)
-        #
-        #     self._delete_old_dir_and_create_new(keyspace, tables)
-        #
-        #     total_size = reduce(lambda s, k: s + k.size, keys, 0)
-        #
-        #     logging.info("Found %(files_count)d files, with total size of %(size)s." % dict(
-        #         files_count=len(keys),
-        #         size=self._human_size(total_size)))
-        #
-        #     self._download_keys(keys, total_size)
-        #
-        #     logging.info("Finished downloading...")
-        #
-        #     self._run_sstableloader(keyspace, tables, target_hosts)
+    # def _restore_from_s3(self, keyspace, table, hosts, target_hosts):
+    #     # TODO:
+    #     # 4. sstableloader
+    #
+    #     logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
+    #                                                                            table=table))
+    #
+    #     logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
+    #                                                                      target_hosts=', '.join(
+    #                                                                          target_hosts)))
+    #     if not table:
+    #         table = ".*?"
+    #
+    #     bucket = self.s3connection.get_bucket(self.snapshot.s3_bucket, validate=False)
+    #
+    #     matcher_string = "(%(hosts)s).*%(separator)s(%(keyspace)s)%(separator)s(%(table)s)%(separator)s" % dict(
+    #         hosts='|'.join(hosts), keyspace=keyspace, table=table, separator=self.path_separator)
+    #     self.keyspace_table_matcher = re.compile(matcher_string)
+    #
+    #     keys = []
+    #     tables = set()
+    #
+    #     for k in bucket.list(self.snapshot.base_path):
+    #         r = self.keyspace_table_matcher.search(k.name)
+    #         if not r:
+    #             continue
+    #
+    #         tables.add(r.group(3))
+    #         keys.append(k)
+    #
+    #     self._delete_old_dir_and_create_new(keyspace, tables)
+    #
+    #     total_size = reduce(lambda s, k: s + k.size, keys, 0)
+    #
+    #     logging.info("Found %(files_count)d files, with total size of %(size)s." % dict(
+    #         files_count=len(keys),
+    #         size=self._human_size(total_size)))
+    #
+    #     self._download_keys(keys, total_size)
+    #
+    #     logging.info("Finished downloading...")
+    #
+    #     self._run_sstableloader(keyspace, tables, target_hosts)

@@ -88,12 +88,12 @@ def upload_chunk(mp, chunk, index):
 
 
 def cancel_upload(bucket, mp, remote_path):
-    '''
+    """
     safe way to cancel a multipart upload
     sleeps SLEEP_TIME seconds and then makes sure that there are not parts left
     in storage
 
-    '''
+    """
     while True:
         try:
             time.sleep(SLEEP_TIME)
@@ -108,13 +108,12 @@ def cancel_upload(bucket, mp, remote_path):
 
 
 def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
-    aws_access_key_id, aws_secret_access_key, manifest, concurrency=None, incremental_backups=False):
-    '''
+                      aws_access_key_id, aws_secret_access_key, manifest, concurrency=None, incremental_backups=False):
+    """
     uploads files listed in a manifest to amazon S3
     to support larger than 5GB files multipart upload is used (chunks of 60MB)
-    files are uploaded compressed with lzop, the .lzo suffix is appended
-
-    '''
+    files are uploaded compressed with snappy, the .snappy suffix is appended
+    """
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
     manifest_fp = open(manifest, 'r')
     files = manifest_fp.read().splitlines()
@@ -162,7 +161,7 @@ def create_upload_manifest(snapshot_name, snapshot_keyspaces, snapshot_table, da
 
 def main():
     subparsers = base_parser.add_subparsers(title='subcommands',
-                                       dest='subcommand')
+                                            dest='subcommand')
     base_parser.add_argument('--incremental_backups', action='store_true', default=False)
 
     put_parser = subparsers.add_parser('put', help='put files on s3 from a manifest')
@@ -171,14 +170,14 @@ def main():
     # put arguments
     put_parser = add_s3_arguments(put_parser)
     put_parser.add_argument('--manifest',
-                           required=True,
-                           help='The manifest containing the files to put on s3')
+                            required=True,
+                            help='The manifest containing the files to put on s3')
 
     put_parser.add_argument('--concurrency',
-                           required=False,
-                           default=DEFAULT_CONCURRENCY,
-                           type=int,
-                           help='Compress and upload concurrent processes')
+                            required=False,
+                            default=DEFAULT_CONCURRENCY,
+                            type=int,
+                            help='Compress and upload concurrent processes')
 
     # create-upload-manifest arguments
     manifest_parser.add_argument('--snapshot_name', required=True, type=str)
