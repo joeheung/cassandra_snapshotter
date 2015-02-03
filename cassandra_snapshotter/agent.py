@@ -8,18 +8,17 @@ import logging
 import multiprocessing
 from multiprocessing.dummy import Pool
 import os
-import subprocess
 import time
 from timeout import timeout
 from utils import add_s3_arguments
 from utils import base_parser
 from utils import map_wrap
 from utils import get_s3_connection_host
+from snappy import StreamCompressor
 
 
 DEFAULT_CONCURRENCY = max(multiprocessing.cpu_count() - 1, 1)
 BUFFER_SIZE = 62914560
-LZOP_BIN = 'lzop'
 MAX_RETRY_COUNT = 3
 SLEEP_TIME = 2
 UPLOAD_TIMEOUT = 600
@@ -27,32 +26,22 @@ UPLOAD_TIMEOUT = 600
 logger = logging.getLogger(__name__)
 
 
-def check_lzop():
-    try:
-        subprocess.call([LZOP_BIN, '--version'])
-    except OSError:
-        print "%s not found on path" % LZOP_BIN
-
-
-def compressed_pipe(path):
+def compressed_pipe(input_path):
     """
     returns a generator that yields compressed chunks of
     the given file_path
 
-    compression is done with lzop
+    compression is done with snappy
 
     """
-    lzop = subprocess.Popen(
-        (LZOP_BIN, '--stdout', path),
-        bufsize=BUFFER_SIZE,
-        stdout=subprocess.PIPE
-    )
+    compressor = StreamCompressor()
 
-    while True:
-        chunk = lzop.stdout.read(BUFFER_SIZE)
-        if not chunk:
-            break
-        yield StringIO(chunk)
+    with open(input_path, 'rb') as file_object:
+        while True:
+            data = file_object.read(BUFFER_SIZE)
+            if not data:
+                break
+            yield StringIO(compressor.add_chunk(data))
 
 
 def get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host):
@@ -65,11 +54,15 @@ def get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connectio
 
 
 def destination_path(s3_base_path, file_path, compressed=True):
-    suffix = compressed and '.lzo' or ''
+    suffix = compressed and '.snappy' or ''
     return '/'.join([s3_base_path, file_path + suffix])
 
 
 @map_wrap
+def upload_file_imap(bucket, source, destination, s3_ssenc):
+    upload_file(bucket, source, destination, s3_ssenc)
+
+
 def upload_file(bucket, source, destination, s3_ssenc):
     completed = False
     retry_count = 0
@@ -77,11 +70,11 @@ def upload_file(bucket, source, destination, s3_ssenc):
         mp = bucket.initiate_multipart_upload(destination, encrypt_key=s3_ssenc)
         try:
             for i, chunk in enumerate(compressed_pipe(source)):
-                mp.upload_part_from_file(chunk, i+1)
+                upload_chunk(mp, chunk, i + 1)
         except Exception:
             logger.warn("Error uploading file %s to %s. Retry count: %d" % (source, destination, retry_count))
             cancel_upload(bucket, mp, destination)
-            retry_count = retry_count + 1
+            retry_count += 1
             if retry_count >= MAX_RETRY_COUNT:
                 logger.exception("Retried too many times uploading file")
                 raise
@@ -126,7 +119,7 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
     manifest_fp = open(manifest, 'r')
     files = manifest_fp.read().splitlines()
     pool = Pool(concurrency)
-    for _ in pool.imap(upload_file, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc) for f in files)):
+    for _ in pool.imap(upload_file_imap, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc) for f in files)):
         pass
     pool.terminate()
 
@@ -208,7 +201,6 @@ def main():
         )
 
     if subcommand == 'put':
-        check_lzop()
         put_from_manifest(
             args.s3_bucket_name,
             get_s3_connection_host(args.s3_bucket_region),

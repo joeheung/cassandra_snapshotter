@@ -16,6 +16,33 @@ import logging
 import os
 import time
 import sys
+from snappy import StreamDecompressor
+
+MAX_RETRY_COUNT = 3
+
+logger = logging.getLogger(__name__)
+
+
+def download_snappy_key(key, dst):
+    logging.info("downloading %(key)s to %(filename)s" % dict(key=key.name, filename=dst))
+    retry_count = 0
+    while retry_count < MAX_RETRY_COUNT:
+        try:
+            decompressor = StreamDecompressor()
+            with open(dst, 'wb') as file_object:
+                for data in key:
+                    buf = decompressor.decompress(data)
+                    if buf:
+                        file_object.write(buf)
+
+            decompressor.flush()
+            return key.size
+        except Exception:
+            logger.warn("Error downloading key {0} to {1}. Retry count: {2}".format(key.name, dst, retry_count))
+            retry_count += 1
+            if retry_count >= MAX_RETRY_COUNT:
+                logger.exception("Retried too many times uploading file")
+                raise
 
 
 class Snapshot(object):
@@ -106,9 +133,9 @@ class RestoreWorker(object):
 
         self.local_source = local_source
         self.merge_dir = merge_dir
-        
+
         self.path_separator = os.path.sep
-        
+
     def restore(self, keyspace, table, hosts, target_hosts):
 
         self._restore(keyspace, table, hosts, target_hosts)
@@ -161,7 +188,6 @@ class RestoreWorker(object):
         total_size = reduce(lambda s, k: s + k.size, keys, 0)
 
         return keys, tables, total_size
-
 
     def _restore(self, keyspace, table, hosts, target_hosts):
         # TODO:
@@ -270,9 +296,7 @@ class RestoreWorker(object):
 
     def _download_key(self, key):
         dst = self.dst_from_key(path=key.name)
-        logging.info("downloading %(key)s to %(filename)s" % dict(key=key.name, filename=dst))
-        key.get_contents_to_filename(dst)
-        return key.size
+        download_snappy_key(key, dst)
 
     def _human_size(self, size):
         for x in ['bytes', 'KB', 'MB', 'GB']:
@@ -357,7 +381,7 @@ class BackupWorker(object):
             data_path=self.cassandra_data_path,
             incremental_backups=incremental_backups and '--incremental_backups' or ''
         )
-        
+
         with prefix(self.agent_prefix):
             self.run_remotely(cmd)
 
@@ -521,7 +545,7 @@ class BackupWorker(object):
 
             for backup_dir in backups_dirs:
                 self.run_remotely('find %s -mindepth 1 -delete' % backup_dir)
-        
+
     def clear_cluster_snapshot(self, snapshot_name):
         logging.info('Clearing snapshots')
         with settings(parallel=True, pool_size=self.connection_pool_size):
@@ -607,46 +631,46 @@ class SnapshotCollection(object):
 
 
 
-    # def _restore_from_s3(self, keyspace, table, hosts, target_hosts):
-    #     # TODO:
-    #     # 4. sstableloader
-    #
-    #     logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
-    #                                                                            table=table))
-    #
-    #     logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
-    #                                                                      target_hosts=', '.join(
-    #                                                                          target_hosts)))
-    #     if not table:
-    #         table = ".*?"
-    #
-    #     bucket = self.s3connection.get_bucket(self.snapshot.s3_bucket, validate=False)
-    #
-    #     matcher_string = "(%(hosts)s).*%(separator)s(%(keyspace)s)%(separator)s(%(table)s)%(separator)s" % dict(
-    #         hosts='|'.join(hosts), keyspace=keyspace, table=table, separator=self.path_separator)
-    #     self.keyspace_table_matcher = re.compile(matcher_string)
-    #
-    #     keys = []
-    #     tables = set()
-    #
-    #     for k in bucket.list(self.snapshot.base_path):
-    #         r = self.keyspace_table_matcher.search(k.name)
-    #         if not r:
-    #             continue
-    #
-    #         tables.add(r.group(3))
-    #         keys.append(k)
-    #
-    #     self._delete_old_dir_and_create_new(keyspace, tables)
-    #
-    #     total_size = reduce(lambda s, k: s + k.size, keys, 0)
-    #
-    #     logging.info("Found %(files_count)d files, with total size of %(size)s." % dict(
-    #         files_count=len(keys),
-    #         size=self._human_size(total_size)))
-    #
-    #     self._download_keys(keys, total_size)
-    #
-    #     logging.info("Finished downloading...")
-    #
-    #     self._run_sstableloader(keyspace, tables, target_hosts)
+        # def _restore_from_s3(self, keyspace, table, hosts, target_hosts):
+        #     # TODO:
+        #     # 4. sstableloader
+        #
+        #     logging.info("Restoring keyspace=%(keyspace)s, table=%(table)s" % dict(keyspace=keyspace,
+        #                                                                            table=table))
+        #
+        #     logging.info("From hosts: %(hosts)s to: %(target_hosts)s" % dict(hosts=', '.join(hosts),
+        #                                                                      target_hosts=', '.join(
+        #                                                                          target_hosts)))
+        #     if not table:
+        #         table = ".*?"
+        #
+        #     bucket = self.s3connection.get_bucket(self.snapshot.s3_bucket, validate=False)
+        #
+        #     matcher_string = "(%(hosts)s).*%(separator)s(%(keyspace)s)%(separator)s(%(table)s)%(separator)s" % dict(
+        #         hosts='|'.join(hosts), keyspace=keyspace, table=table, separator=self.path_separator)
+        #     self.keyspace_table_matcher = re.compile(matcher_string)
+        #
+        #     keys = []
+        #     tables = set()
+        #
+        #     for k in bucket.list(self.snapshot.base_path):
+        #         r = self.keyspace_table_matcher.search(k.name)
+        #         if not r:
+        #             continue
+        #
+        #         tables.add(r.group(3))
+        #         keys.append(k)
+        #
+        #     self._delete_old_dir_and_create_new(keyspace, tables)
+        #
+        #     total_size = reduce(lambda s, k: s + k.size, keys, 0)
+        #
+        #     logging.info("Found %(files_count)d files, with total size of %(size)s." % dict(
+        #         files_count=len(keys),
+        #         size=self._human_size(total_size)))
+        #
+        #     self._download_keys(keys, total_size)
+        #
+        #     logging.info("Finished downloading...")
+        #
+        #     self._run_sstableloader(keyspace, tables, target_hosts)
