@@ -1,12 +1,11 @@
 from collections import defaultdict
+import socket
 import logging
 from fabric.api import env
-from snapshotting import BackupWorker, RestoreWorker
-from snapshotting import Snapshot
-from snapshotting import SnapshotCollection
-from utils import add_s3_arguments
+from fabric.operations import run, local
+from snapshotting import BackupWorker, RestoreWorker, Snapshot, SnapshotCollection
+from utils import add_s3_arguments, get_s3_connection_host
 from utils import base_parser as _base_parser
-from utils import get_s3_connection_host
 
 
 env.use_ssh_config = True
@@ -25,7 +24,12 @@ def run_backup(args):
     if args.sshkey:
         env.key_filename = args.sshkey
 
-    env.hosts = args.hosts.split(',')
+    if not args.hosts:
+        env.hosts = [socket.gethostname()]
+        env.run = lambda cmd: local(cmd, capture=True)
+    else:
+        env.hosts = args.hosts.split(',')
+        env.run = run
 
     keep_new_snapshot = args.keep_new_snapshot
     delete_old_snapshots = args.delete_old_snapshots
@@ -152,8 +156,8 @@ def main():
 
     # snapshot / backup arguments
     backup_parser.add_argument('--hosts',
-                               required=True,
-                               help='The comma separated list of hosts to snapshot')
+                               default='',
+                               help='The comma separated list of hosts to snapshot (omit to run locally)')
 
     backup_parser.add_argument('--keyspaces',
                                default='',

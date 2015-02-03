@@ -4,11 +4,7 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
 from datetime import datetime
-from fabric.api import env
-from fabric.api import execute
-from fabric.api import hide
-from fabric.api import run
-from fabric.api import sudo
+from fabric.api import env, execute, hide
 from fabric.context_managers import settings, prefix
 from multiprocessing.dummy import Pool
 import json
@@ -351,9 +347,9 @@ class BackupWorker(object):
         self.connection_pool_size = connection_pool_size
         self.agent_path = agent_path or 'cassandra-snapshotter-agent'
         if use_sudo:
-            self.run_remotely = sudo
+            self.run_remotely = lambda cmd: env.run('sudo ' + cmd)
         else:
-            self.run_remotely = run
+            self.run_remotely = env.run
         if agent_virtualenv:
             self.agent_prefix = 'source %s/bin/activate' % agent_virtualenv
         else:

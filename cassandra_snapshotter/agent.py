@@ -10,10 +10,7 @@ from multiprocessing.dummy import Pool
 import os
 import time
 from timeout import timeout
-from utils import add_s3_arguments
-from utils import base_parser
-from utils import map_wrap
-from utils import get_s3_connection_host
+from utils import add_s3_arguments, base_parser, map_wrap, get_s3_connection_host
 from snappy import StreamCompressor
 
 
