@@ -341,7 +341,7 @@ class BackupWorker(object):
         self.s3_ssenc = s3_ssenc
         self.s3_connection_host = s3_connection_host
         self.cassandra_data_path = cassandra_data_path
-        self.nodetool_path = nodetool_path or "%s/nodetool" % cassandra_bin_dir
+        self.nodetool_path = nodetool_path or os.path.join(cassandra_bin_dir, "nodetool")
         self.cassandra_cli_path = "%s/cassandra-cli" % cassandra_bin_dir
         self.backup_schema = backup_schema
         self.connection_pool_size = connection_pool_size

@@ -6,7 +6,7 @@ except ImportError:
 import glob
 import logging
 import multiprocessing
-from multiprocessing.dummy import Pool
+from joblib import Parallel, delayed
 import os
 import time
 from timeout import timeout
@@ -112,12 +112,18 @@ def put_from_manifest(s3_bucket, s3_connection_host, s3_ssenc, s3_base_path,
     files are uploaded compressed with snappy, the .snappy suffix is appended
     """
     bucket = get_bucket(s3_bucket, aws_access_key_id, aws_secret_access_key, s3_connection_host)
+    print bucket
     manifest_fp = open(manifest, 'r')
     files = manifest_fp.read().splitlines()
-    pool = Pool(concurrency)
-    for _ in pool.imap(upload_file_imap, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc) for f in files)):
-        pass
-    pool.terminate()
+    print files
+    # pool = Pool(concurrency)
+    # for _ in pool.imap(upload_file_imap, ((bucket, f, destination_path(s3_base_path, f), s3_ssenc) for f in files)):
+    #     pass
+    # pool.terminate()
+
+    output = Parallel(n_jobs=concurrency)(
+        delayed(upload_file)(bucket, f, destination_path(s3_base_path, f), s3_ssenc)
+        for f in files)
 
     if incremental_backups:
         for f in files:
